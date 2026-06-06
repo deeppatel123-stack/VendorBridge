@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   Clock, FileText, ShoppingCart, Receipt, Plus, GitCompare, Users, CheckSquare,
 } from 'lucide-react';
@@ -13,9 +14,10 @@ import Badge from '../components/ui/Badge';
 import Logo from '../components/brand/Logo';
 import { useRole } from '../context/RoleContext';
 import { useChartTheme } from '../utils/chartTheme';
-import {
-  monthlySpending, vendorPerformance, rfqs, approvals, purchaseOrders, invoices, formatCurrency,
-} from '../data';
+import { formatCurrency } from '../utils/formatters';
+import { dashboardApi } from '../api/dashboard';
+import { queryKeys } from '../api/queryKeys';
+import { LoadingState, ErrorState } from '../components/ui/DataState';
 import AIRecommendation from '../components/widgets/AIRecommendation';
 import ProcurementScore from '../components/widgets/ProcurementScore';
 import CostSavings from '../components/widgets/CostSavings';
@@ -26,37 +28,35 @@ import ProcurementHeatmap from '../components/widgets/ProcurementHeatmap';
 import ProcurementCalendar from '../components/widgets/ProcurementCalendar';
 import KPIDashboard from '../components/widgets/KPIDashboard';
 
-function AdminDashboard() {
+function AdminDashboard({ kpis }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Total Users" value="48" change="+3" trend="up" icon={Users} color="cyan" />
-        <StatCard title="Active Vendors" value="24" change="+2" trend="up" icon={Users} color="emerald" />
-        <StatCard title="System Uptime" value="99.9%" icon={CheckSquare} color="charcoal" />
+        <StatCard title="Active Vendors" value={kpis?.activeVendors ?? 0} icon={Users} color="emerald" />
+        <StatCard title="Total RFQs" value={kpis?.totalRFQs ?? 0} icon={FileText} color="cyan" />
+        <StatCard title="Total POs" value={kpis?.totalPOs ?? 0} icon={ShoppingCart} color="charcoal" />
       </div>
-      <KPIDashboard />
+      <KPIDashboard kpis={kpis} />
     </div>
   );
 }
 
-function VendorDashboard() {
-  const activeRFQs = rfqs.filter((r) => r.status === 'open').length;
+function VendorDashboard({ stats, kpis }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <StatCard title="Active RFQs" value={activeRFQs} icon={FileText} color="cyan" />
-      <StatCard title="Submitted Quotes" value="8" change="+2" trend="up" icon={Receipt} color="emerald" />
-      <StatCard title="POs Received" value="5" icon={ShoppingCart} color="amber" />
+      <StatCard title="Active RFQs" value={stats?.activeRFQs ?? 0} icon={FileText} color="cyan" />
+      <StatCard title="Submitted Quotes" value={kpis?.totalQuotations ?? 0} icon={Receipt} color="emerald" />
+      <StatCard title="POs Received" value={stats?.totalPOs ?? 0} icon={ShoppingCart} color="amber" />
     </div>
   );
 }
 
-function ManagerDashboard() {
-  const pending = approvals.filter((a) => a.status === 'pending').length;
+function ManagerDashboard({ stats, kpis }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <StatCard title="Pending Approvals" value={pending} icon={Clock} color="amber" />
-      <StatCard title="Approved This Month" value="12" change="+4" trend="up" icon={CheckSquare} color="emerald" />
-      <StatCard title="Avg. Response Time" value="1.8 days" icon={Clock} color="cyan" />
+      <StatCard title="Pending Approvals" value={stats?.pendingApprovals ?? 0} icon={Clock} color="amber" />
+      <StatCard title="Active RFQs" value={stats?.activeRFQs ?? 0} icon={FileText} color="emerald" />
+      <StatCard title="Avg. Approval Time" value={kpis?.avgApprovalTime ?? '—'} icon={Clock} color="cyan" />
     </div>
   );
 }
@@ -66,10 +66,29 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const chart = useChartTheme();
 
-  const pendingApprovals = approvals.filter((a) => a.status === 'pending').length;
-  const activeRFQs = rfqs.filter((r) => r.status === 'open').length;
-  const activePOs = purchaseOrders.length;
-  const pendingInvoices = invoices.filter((i) => i.status !== 'paid').length;
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: queryKeys.dashboard,
+    queryFn: dashboardApi.get,
+  });
+
+  if (isLoading) return <LoadingState message="Loading dashboard..." />;
+  if (isError) return <ErrorState message={error?.response?.data?.message || error.message} onRetry={refetch} />;
+
+  const stats = data?.stats || {};
+  const kpis = data?.kpis || {};
+  const monthlySpending = data?.monthlySpending || [];
+  const vendorPerformance = data?.vendorPerformance || [];
+  const status = data?.status || {};
+  const leaderboard = data?.leaderboard || [];
+  const heatmapData = data?.heatmapData || [];
+  const recentActivity = data?.recentActivity || [];
+
+  const procurementStatusItems = [
+    { label: 'Draft RFQs', count: status.draftRFQs ?? 0, color: 'bg-foreground-subtle' },
+    { label: 'Open RFQs', count: status.openRFQs ?? 0, color: 'bg-cyan-soft' },
+    { label: 'Evaluating', count: status.evaluating ?? 0, color: 'bg-amber-warm' },
+    { label: 'Approved POs', count: status.approvedPOs ?? 0, color: 'bg-emerald-brand' },
+  ];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -89,75 +108,78 @@ export default function Dashboard() {
         }
       />
 
-      {role === 'admin' && <AdminDashboard />}
-      {role === 'vendor' && <VendorDashboard />}
-      {role === 'manager' && <ManagerDashboard />}
+      {role === 'admin' && <AdminDashboard kpis={kpis} />}
+      {role === 'vendor' && <VendorDashboard stats={stats} kpis={kpis} />}
+      {role === 'manager' && <ManagerDashboard stats={stats} kpis={kpis} />}
 
       {role === 'procurement' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard title="Pending Approvals" value={pendingApprovals} change="+2" trend="up" icon={Clock} color="amber" />
-          <StatCard title="Active RFQs" value={activeRFQs} icon={FileText} color="cyan" />
-          <StatCard title="Purchase Orders" value={activePOs} change="+1" trend="up" icon={ShoppingCart} color="emerald" />
-          <StatCard title="Pending Invoices" value={pendingInvoices} icon={Receipt} color="charcoal" />
+          <StatCard title="Pending Approvals" value={stats.pendingApprovals ?? 0} icon={Clock} color="amber" />
+          <StatCard title="Active RFQs" value={stats.activeRFQs ?? 0} icon={FileText} color="cyan" />
+          <StatCard title="Purchase Orders" value={stats.totalPOs ?? 0} icon={ShoppingCart} color="emerald" />
+          <StatCard title="Pending Invoices" value={stats.pendingInvoices ?? 0} icon={Receipt} color="charcoal" />
         </div>
       )}
 
-      <KPIDashboard />
+      <KPIDashboard kpis={kpis} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader title="Monthly Spending" subtitle="Procurement expenditure trend" />
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={monthlySpending}>
-                <defs>
-                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={chart.colors.emerald} stopOpacity={chart.isDark ? 0.35 : 0.3} />
-                    <stop offset="100%" stopColor={chart.colors.emerald} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: chart.axis }} />
-                <YAxis tick={{ fontSize: 12, fill: chart.axis }} tickFormatter={(v) => `$${v / 1000}k`} />
-                <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={chart.tooltip} />
-                <Area type="monotone" dataKey="spending" stroke={chart.colors.emerald} fill="url(#spendGrad)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+            {monthlySpending.length ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={monthlySpending}>
+                  <defs>
+                    <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={chart.colors.emerald} stopOpacity={chart.isDark ? 0.35 : 0.3} />
+                      <stop offset="100%" stopColor={chart.colors.emerald} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: chart.axis }} />
+                  <YAxis tick={{ fontSize: 12, fill: chart.axis }} tickFormatter={(v) => `$${v / 1000}k`} />
+                  <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={chart.tooltip} />
+                  <Area type="monotone" dataKey="spending" stroke={chart.colors.emerald} fill="url(#spendGrad)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-foreground-subtle py-8 text-center">No spending data yet</p>
+            )}
           </Card>
 
           <Card>
             <CardHeader title="Vendor Performance" subtitle="Multi-dimensional vendor scoring" />
-            <ResponsiveContainer width="100%" height={280}>
-              <RadarChart data={vendorPerformance}>
-                <PolarGrid stroke={chart.polarGrid} />
-                <PolarAngleAxis dataKey="name" tick={{ fontSize: 11, fill: chart.axis }} />
-                <Radar name="Delivery" dataKey="delivery" stroke={chart.colors.emerald} fill={chart.colors.emerald} fillOpacity={chart.isDark ? 0.2 : 0.15} />
-                <Radar name="Quality" dataKey="quality" stroke={chart.colors.cyan} fill={chart.colors.cyan} fillOpacity={chart.isDark ? 0.15 : 0.1} />
-                <Tooltip contentStyle={chart.tooltip} />
-              </RadarChart>
-            </ResponsiveContainer>
+            {vendorPerformance.length ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <RadarChart data={vendorPerformance}>
+                  <PolarGrid stroke={chart.polarGrid} />
+                  <PolarAngleAxis dataKey="name" tick={{ fontSize: 11, fill: chart.axis }} />
+                  <Radar name="Delivery" dataKey="delivery" stroke={chart.colors.emerald} fill={chart.colors.emerald} fillOpacity={chart.isDark ? 0.2 : 0.15} />
+                  <Radar name="Quality" dataKey="quality" stroke={chart.colors.cyan} fill={chart.colors.cyan} fillOpacity={chart.isDark ? 0.15 : 0.1} />
+                  <Tooltip contentStyle={chart.tooltip} />
+                </RadarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-foreground-subtle py-8 text-center">No vendor performance data</p>
+            )}
           </Card>
         </div>
 
         <div className="space-y-6">
-          <AIRecommendation />
-          <ProcurementScore />
-          <CostSavings />
+          <AIRecommendation leaderboard={leaderboard} kpis={kpis} />
+          <ProcurementScore score={kpis.procurementHealth} />
+          <CostSavings kpis={kpis} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ActivityFeed />
+        <ActivityFeed items={recentActivity} />
         <NotificationCenter />
         <Card>
           <CardHeader title="Procurement Status" subtitle="Pipeline overview" />
           <div className="space-y-3">
-            {[
-              { label: 'Draft RFQs', count: rfqs.filter((r) => r.status === 'draft').length, color: 'bg-foreground-subtle' },
-              { label: 'Open RFQs', count: activeRFQs, color: 'bg-cyan-soft' },
-              { label: 'Evaluating', count: rfqs.filter((r) => r.status === 'evaluating').length, color: 'bg-amber-warm' },
-              { label: 'Approved POs', count: purchaseOrders.filter((p) => p.status === 'approved').length, color: 'bg-emerald-brand' },
-            ].map((item) => (
+            {procurementStatusItems.map((item) => (
               <div key={item.label} className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${item.color}`} />
                 <span className="text-sm text-foreground-muted flex-1">{item.label}</span>
@@ -169,8 +191,8 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <VendorLeaderboard />
-        <ProcurementHeatmap />
+        <VendorLeaderboard leaderboard={leaderboard} />
+        <ProcurementHeatmap heatmapData={heatmapData} />
         <ProcurementCalendar />
       </div>
 
@@ -185,6 +207,7 @@ export default function Dashboard() {
           ].map((action) => (
             <button
               key={action.label}
+              type="button"
               onClick={() => navigate(action.path)}
               className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border hover:border-emerald-brand/30 hover:bg-emerald-brand/5 transition-all card-hover interactive"
             >

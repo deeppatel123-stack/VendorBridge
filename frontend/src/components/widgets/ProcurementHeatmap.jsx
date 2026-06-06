@@ -1,41 +1,39 @@
 import Card, { CardHeader } from '../ui/Card';
-import { heatmapData } from '../../data';
 
-function getIntensity(value) {
-  if (value === 0) return 'bg-surface-muted';
-  if (value <= 3) return 'bg-emerald-brand/20';
-  if (value <= 7) return 'bg-emerald-brand/40';
-  if (value <= 11) return 'bg-emerald-brand/60';
-  return 'bg-emerald-brand/90';
-}
+const hours = ['9am', '10am', '11am', '12pm', '1pm', '2pm', '3pm'];
 
-export default function ProcurementHeatmap() {
-  const hours = ['9am', '10', '11', '12', '1pm', '2', '3'];
+export default function ProcurementHeatmap({ heatmapData = [] }) {
+  const maxVal = Math.max(1, ...heatmapData.flatMap((d) => d.hours || []));
 
   return (
     <Card>
-      <CardHeader title="Procurement Activity Heatmap" subtitle="Weekly activity by hour" />
-      <div className="overflow-x-auto">
-        <div className="min-w-[280px]">
-          <div className="flex gap-1 mb-1 ml-10">
-            {hours.map((h) => (
-              <span key={h} className="flex-1 text-center text-[10px] text-foreground-subtle">{h}</span>
-            ))}
+      <CardHeader title="Activity Heatmap" subtitle="Procurement activity by day" />
+      {heatmapData.length === 0 ? (
+        <p className="text-sm text-foreground-subtle py-4 text-center">No activity data</p>
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-8 gap-1 text-[10px] text-foreground-subtle">
+            <div />
+            {hours.map((h) => <div key={h} className="text-center">{h}</div>)}
           </div>
           {heatmapData.map((row) => (
-            <div key={row.day} className="flex items-center gap-1 mb-1">
-              <span className="w-8 text-xs text-foreground-subtle">{row.day}</span>
-              {row.hours.map((val, i) => (
-                <div
-                  key={i}
-                  className={`flex-1 h-6 rounded ${getIntensity(val)} transition-colors hover:ring-2 hover:ring-emerald-brand/30`}
-                  title={`${val} activities`}
-                />
-              ))}
+            <div key={row.day} className="grid grid-cols-8 gap-1 items-center">
+              <span className="text-xs text-foreground-subtle">{row.day}</span>
+              {(row.hours || []).map((val, i) => {
+                const intensity = val / maxVal;
+                return (
+                  <div
+                    key={i}
+                    className="aspect-square rounded-sm"
+                    style={{ backgroundColor: `rgba(16, 185, 129, ${0.1 + intensity * 0.7})` }}
+                    title={`${val} events`}
+                  />
+                );
+              })}
             </div>
           ))}
         </div>
-      </div>
+      )}
     </Card>
   );
 }

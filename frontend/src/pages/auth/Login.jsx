@@ -1,27 +1,33 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, UserCog } from 'lucide-react';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { Mail, Lock, ArrowRight } from 'lucide-react';
 import Button from '../../components/ui/Button';
-import { useRole } from '../../context/RoleContext';
-
-const roles = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'procurement', label: 'Procurement Officer' },
-  { value: 'manager', label: 'Manager / Approver' },
-  { value: 'vendor', label: 'Vendor' },
-];
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { setRole } = useRole();
+  const location = useLocation();
+  const { login, isAuthenticated } = useAuth();
+  const { success, error: toastError } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRoleLocal] = useState('procurement');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  if (isAuthenticated) return <Navigate to={location.state?.from?.pathname || '/dashboard'} replace />;
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setRole(role);
-    navigate('/dashboard');
+    setLoading(true);
+    try {
+      await login(email, password);
+      success('Welcome back!');
+      navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
+    } catch (err) {
+      toastError(err.response?.data?.message || 'Invalid email or password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,18 +68,6 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="auth-field">
-          <label htmlFor="role">Sign in as</label>
-          <div className="auth-input-wrap">
-            <UserCog className="auth-input-icon" />
-            <select id="role" value={role} onChange={(e) => setRoleLocal(e.target.value)}>
-              {roles.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
         <div className="flex items-center justify-between text-sm pt-1">
           <label className="flex items-center gap-2 text-foreground-subtle cursor-pointer">
             <input type="checkbox" className="rounded border-border-strong text-emerald-brand w-3.5 h-3.5" />
@@ -84,8 +78,8 @@ export default function Login() {
           </Link>
         </div>
 
-        <Button type="submit" size="lg" className="w-full mt-2" icon={ArrowRight}>
-          Sign In
+        <Button type="submit" size="lg" className="w-full mt-2" icon={ArrowRight} disabled={loading}>
+          {loading ? 'Signing in...' : 'Sign In'}
         </Button>
       </form>
 

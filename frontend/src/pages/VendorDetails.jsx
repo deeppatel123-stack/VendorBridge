@@ -1,34 +1,61 @@
 import { useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Star, Mail, Phone, MapPin, FileText, Download, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Card, { CardHeader } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import RiskIndicator from '../components/widgets/RiskIndicator';
-import { getVendorById, quotations, purchaseOrders, rfqs, formatCurrency, formatDate } from '../data';
+import { LoadingState, ErrorState } from '../components/ui/DataState';
+import { formatCurrency, formatDate, entityId } from '../utils/formatters';
+import { vendorsApi } from '../api/vendors';
+import { quotationsApi } from '../api/quotations';
+import { purchaseOrdersApi } from '../api/purchaseOrders';
+import { queryKeys } from '../api/queryKeys';
 
 export default function VendorDetails() {
   const { id } = useParams();
-  const vendor = getVendorById(id);
 
-  if (!vendor) {
+  const { data: vendor, isLoading, isError, error, refetch } = useQuery({
+    queryKey: queryKeys.vendor(id),
+    queryFn: () => vendorsApi.get(id),
+  });
+
+  const { data: quotesData } = useQuery({
+    queryKey: queryKeys.quotations({ vendor: id, limit: 10 }),
+    queryFn: () => quotationsApi.list({ limit: 50 }),
+    enabled: !!id,
+  });
+
+  const { data: posData } = useQuery({
+    queryKey: queryKeys.purchaseOrders({ limit: 50 }),
+    queryFn: () => purchaseOrdersApi.list({ limit: 50 }),
+    enabled: !!id,
+  });
+
+  if (isLoading) return <LoadingState message="Loading vendor..." />;
+  if (isError || !vendor) {
     return (
       <div className="text-center py-20">
-        <p className="text-lg text-foreground-subtle">Vendor not found</p>
-        <Link to="/vendors" className="text-emerald-brand text-sm mt-2 inline-block">Back to vendors</Link>
+        <ErrorState message={error?.response?.data?.message || 'Vendor not found'} onRetry={refetch} />
+        <Link to="/vendors" className="text-emerald-brand text-sm mt-4 inline-block">Back to vendors</Link>
       </div>
     );
   }
 
-  const vendorQuotes = quotations.filter((q) => q.vendorId === vendor.id);
-  const vendorPOs = purchaseOrders.filter((p) => p.vendorId === vendor.id);
+  const vendorQuotes = (quotesData?.items || []).filter(
+    (q) => entityId(q.vendor) === id || q.vendor?._id === id
+  );
+  const vendorPOs = (posData?.items || []).filter(
+    (po) => entityId(po.vendor) === id || po.vendor?._id === id
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title={vendor.name}
         breadcrumbs={<Link to="/vendors" className="text-emerald-brand hover:underline">Vendors</Link>}
-        subtitle={`${vendor.category} · Joined ${formatDate(vendor.joined)}`}
+        subtitle={`${vendor.category} · Joined ${formatDate(vendor.createdAt)}`}
         actions={
           <>
             <Button variant="outline">Edit Vendor</Button>
@@ -53,16 +80,16 @@ export default function VendorDetails() {
                     {vendor.rating} rating
                   </span>
                 </div>
-                <p className="text-sm text-foreground-subtle">{vendor.id} · GST: {vendor.gst}</p>
+                <p className="text-sm text-foreground-subtle">{vendor.vendorCode}{vendor.gst ? ` · GST: ${vendor.gst}` : ''}</p>
               </div>
             </div>
           </Card>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { label: 'Total Orders', value: vendor.totalOrders },
+              { label: 'Total Orders', value: vendor.totalOrders ?? vendorPOs.length },
               { label: 'On-Time Delivery', value: `${vendor.onTimeDelivery}%` },
-              { label: 'Total Spend', value: formatCurrency(vendor.spend) },
+              { label: 'Total Spend', value: formatCurrency(vendor.spend || vendor.totalSpend) },
               { label: 'Quotations', value: vendorQuotes.length },
             ].map((m) => (
               <Card key={m.label} className="text-center">
@@ -75,18 +102,15 @@ export default function VendorDetails() {
           <Card>
             <CardHeader title="Recent Quotations" />
             <div className="space-y-3">
-              {vendorQuotes.map((q) => {
-                const rfq = rfqs.find((r) => r.id === q.rfqId);
-                return (
-                  <div key={q.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-muted">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{rfq?.title || q.rfqId}</p>
-                      <p className="text-xs text-foreground-subtle">{formatCurrency(q.price)} · {q.deliveryDays} days delivery</p>
-                    </div>
-                    <Badge status={q.status} />
+              {vendorQuotes.map((q) => (
+                <div key={entityId(q)} className="flex items-center justify-between p-3 rounded-lg bg-surface-muted">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{q.rfq?.title || q.quotationNumber}</p>
+                    <p className="text-xs text-foreground-subtle">{formatCurrency(q.price)} · {q.deliveryDays} days delivery</p>
                   </div>
-                );
-              })}
+                  <Badge status={q.status} />
+                </div>
+              ))}
               {vendorQuotes.length === 0 && <p className="text-sm text-foreground-subtle text-center py-4">No quotations yet</p>}
             </div>
           </Card>
@@ -95,14 +119,15 @@ export default function VendorDetails() {
             <CardHeader title="Procurement History" />
             <div className="space-y-3">
               {vendorPOs.map((po) => (
-                <div key={po.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                <div key={entityId(po)} className="flex items-center justify-between p-3 rounded-lg border border-border">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{po.id}</p>
-                    <p className="text-xs text-foreground-subtle">Created {formatDate(po.created)}</p>
+                    <p className="text-sm font-medium text-foreground">{po.poNumber}</p>
+                    <p className="text-xs text-foreground-subtle">Created {formatDate(po.createdAt)}</p>
                   </div>
                   <Badge status={po.status} />
                 </div>
               ))}
+              {vendorPOs.length === 0 && <p className="text-sm text-foreground-subtle text-center py-4">No purchase orders yet</p>}
             </div>
           </Card>
         </div>
@@ -112,9 +137,9 @@ export default function VendorDetails() {
             <CardHeader title="Contact Details" />
             <div className="space-y-3 text-sm">
               <p className="flex items-center gap-2 text-foreground-muted"><Mail className="w-4 h-4 text-foreground-subtle" />{vendor.email}</p>
-              <p className="flex items-center gap-2 text-foreground-muted"><Phone className="w-4 h-4 text-foreground-subtle" />{vendor.phone}</p>
-              <p className="flex items-start gap-2 text-foreground-muted"><MapPin className="w-4 h-4 text-foreground-subtle mt-0.5" />{vendor.address}</p>
-              <p className="text-foreground-subtle">Contact: <span className="text-foreground font-medium">{vendor.contactPerson}</span></p>
+              {vendor.phone && <p className="flex items-center gap-2 text-foreground-muted"><Phone className="w-4 h-4 text-foreground-subtle" />{vendor.phone}</p>}
+              {vendor.address && <p className="flex items-start gap-2 text-foreground-muted"><MapPin className="w-4 h-4 text-foreground-subtle mt-0.5" />{vendor.address}</p>}
+              {vendor.contactPerson && <p className="text-foreground-subtle">Contact: <span className="text-foreground font-medium">{vendor.contactPerson}</span></p>}
             </div>
           </Card>
 
@@ -124,7 +149,7 @@ export default function VendorDetails() {
               {[
                 { label: 'Delivery Score', value: vendor.onTimeDelivery },
                 { label: 'Quality Score', value: Math.round(vendor.rating * 20) },
-                { label: 'Cost Efficiency', value: 85 },
+                { label: 'Cost Efficiency', value: Math.min(95, Math.round(100 - (vendor.risk === 'high' ? 18 : vendor.risk === 'medium' ? 10 : 5))) },
               ].map((m) => (
                 <div key={m.label}>
                   <div className="flex justify-between text-sm mb-1">
@@ -139,24 +164,26 @@ export default function VendorDetails() {
             </div>
             <div className="mt-4 flex items-center gap-2 text-sm text-emerald-dark">
               <TrendingUp className="w-4 h-4" />
-              Performance trending up
+              Performance from live data
             </div>
           </Card>
 
-          <Card>
-            <CardHeader title="Documents" />
-            <div className="space-y-2">
-              {['GST Certificate.pdf', 'ISO 9001 Certificate.pdf', 'Vendor Agreement.pdf'].map((doc) => (
-                <div key={doc} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-muted transition-colors">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-foreground-subtle" />
-                    <span className="text-sm text-foreground">{doc}</span>
+          {vendor.documents?.length > 0 && (
+            <Card>
+              <CardHeader title="Documents" />
+              <div className="space-y-2">
+                {vendor.documents.map((doc) => (
+                  <div key={doc._id || doc.fileName} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-muted transition-colors">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-foreground-subtle" />
+                      <span className="text-sm text-foreground">{doc.originalName || doc.fileName}</span>
+                    </div>
+                    <Button size="sm" variant="ghost"><Download className="w-3.5 h-3.5" /></Button>
                   </div>
-                  <Button size="sm" variant="ghost"><Download className="w-3.5 h-3.5" /></Button>
-                </div>
-              ))}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

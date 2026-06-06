@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Search, Plus, LayoutGrid, List, Calendar, Users } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Card, { CardHeader } from '../components/ui/Card';
 import AdvancedFilters from '../components/widgets/AdvancedFilters';
-import { rfqs, formatCurrency, formatDate } from '../data';
+import { LoadingState, ErrorState, EmptyState } from '../components/ui/DataState';
+import { formatCurrency, formatDate, entityId } from '../utils/formatters';
+import { useDebounce } from '../hooks/useDebounce';
+import { rfqsApi } from '../api/rfqs';
+import { queryKeys } from '../api/queryKeys';
 
 const filterOptions = [
   { key: 'status', label: 'Status', options: [
@@ -23,22 +28,32 @@ export default function RFQListing() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState('cards');
   const [filters, setFilters] = useState({});
-  const [sort, setSort] = useState('newest');
+  const [sort, setSort] = useState('-createdAt');
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search);
 
-  let filtered = rfqs.filter((r) => {
-    const matchSearch = r.title.toLowerCase().includes(search.toLowerCase()) || r.id.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = !filters.status || r.status === filters.status;
-    return matchSearch && matchStatus;
+  const params = {
+    page,
+    limit: 20,
+    search: debouncedSearch || undefined,
+    status: filters.status || undefined,
+    sortBy: sort === 'deadline' ? 'deadline' : 'createdAt',
+    order: sort === 'deadline' ? 'asc' : 'desc',
+  };
+
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: queryKeys.rfqs(params),
+    queryFn: () => rfqsApi.list(params),
   });
 
-  if (sort === 'newest') filtered = [...filtered].sort((a, b) => new Date(b.created) - new Date(a.created));
-  if (sort === 'deadline') filtered = [...filtered].sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+  const rfqs = data?.items || [];
+  const pagination = data?.pagination;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title="Request for Quotations"
-        subtitle={`${rfqs.length} total RFQs`}
+        subtitle={`${pagination?.total ?? 0} total RFQs`}
         actions={<Button icon={Plus} onClick={() => navigate('/rfq/create')}>Create RFQ</Button>}
       />
 
@@ -49,7 +64,7 @@ export default function RFQListing() {
             type="text"
             placeholder="Search RFQs..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border text-sm focus:border-emerald-brand focus:outline-none focus:ring-2 focus:ring-emerald-brand/20"
           />
         </div>
@@ -58,27 +73,31 @@ export default function RFQListing() {
           onChange={(e) => setSort(e.target.value)}
           className="rounded-lg border border-border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-brand/20"
         >
-          <option value="newest">Newest First</option>
+          <option value="-createdAt">Newest First</option>
           <option value="deadline">Deadline Soonest</option>
         </select>
-        <AdvancedFilters filters={filterOptions} onApply={setFilters} />
+        <AdvancedFilters filters={filterOptions} onApply={(f) => { setFilters(f); setPage(1); }} />
         <div className="flex rounded-lg border border-border overflow-hidden">
-          <button onClick={() => setView('cards')} className={`p-2.5 ${view === 'cards' ? 'bg-emerald-brand/10 text-emerald-brand' : 'text-foreground-subtle'}`}>
+          <button type="button" onClick={() => setView('cards')} className={`p-2.5 ${view === 'cards' ? 'bg-emerald-brand/10 text-emerald-brand' : 'text-foreground-subtle'}`}>
             <LayoutGrid className="w-4 h-4" />
           </button>
-          <button onClick={() => setView('table')} className={`p-2.5 ${view === 'table' ? 'bg-emerald-brand/10 text-emerald-brand' : 'text-foreground-subtle'}`}>
+          <button type="button" onClick={() => setView('table')} className={`p-2.5 ${view === 'table' ? 'bg-emerald-brand/10 text-emerald-brand' : 'text-foreground-subtle'}`}>
             <List className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {view === 'cards' ? (
+      {isLoading && <LoadingState />}
+      {isError && <ErrorState message={error?.response?.data?.message || error.message} onRetry={refetch} />}
+      {!isLoading && !isError && rfqs.length === 0 && <EmptyState message="No RFQs found" />}
+
+      {!isLoading && !isError && rfqs.length > 0 && view === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((rfq) => (
-            <Card key={rfq.id} hover className="cursor-pointer" onClick={() => navigate('/quotations/submit')}>
+          {rfqs.map((rfq) => (
+            <Card key={entityId(rfq)} hover className="cursor-pointer" onClick={() => navigate(`/quotations/submit?rfq=${entityId(rfq)}`)}>
               <div className="flex items-start justify-between mb-3">
                 <Badge status={rfq.status} />
-                <span className="text-xs text-foreground-subtle font-mono">{rfq.id}</span>
+                <span className="text-xs text-foreground-subtle font-mono">{rfq.rfqNumber}</span>
               </div>
               <h3 className="font-semibold text-foreground mb-1">{rfq.title}</h3>
               <p className="text-sm text-foreground-subtle line-clamp-2 mb-4">{rfq.description}</p>
@@ -93,7 +112,9 @@ export default function RFQListing() {
             </Card>
           ))}
         </div>
-      ) : (
+      )}
+
+      {!isLoading && !isError && rfqs.length > 0 && view === 'table' && (
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -105,9 +126,9 @@ export default function RFQListing() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((rfq) => (
-                  <tr key={rfq.id} className="border-b border-border hover:bg-surface-muted cursor-pointer" onClick={() => navigate('/quotations/submit')}>
-                    <td className="py-3 px-3 font-mono text-xs">{rfq.id}</td>
+                {rfqs.map((rfq) => (
+                  <tr key={entityId(rfq)} className="border-b border-border hover:bg-surface-muted cursor-pointer" onClick={() => navigate(`/quotations/submit?rfq=${entityId(rfq)}`)}>
+                    <td className="py-3 px-3 font-mono text-xs">{rfq.rfqNumber}</td>
                     <td className="py-3 px-3 font-medium text-foreground">{rfq.title}</td>
                     <td className="py-3 px-3"><Badge status={rfq.status} /></td>
                     <td className="py-3 px-3 text-foreground-subtle">{formatDate(rfq.deadline)}</td>
@@ -119,6 +140,14 @@ export default function RFQListing() {
             </table>
           </div>
         </Card>
+      )}
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex justify-center gap-2">
+          <Button size="sm" variant="outline" disabled={!pagination.hasPrev} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+          <span className="text-sm text-foreground-subtle self-center">Page {pagination.page} of {pagination.totalPages}</span>
+          <Button size="sm" variant="outline" disabled={!pagination.hasNext} onClick={() => setPage((p) => p + 1)}>Next</Button>
+        </div>
       )}
     </div>
   );

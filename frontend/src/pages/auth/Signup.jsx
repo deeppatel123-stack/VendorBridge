@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { User, Mail, Lock, Building2, ArrowRight, UserCog } from 'lucide-react';
 import Button from '../../components/ui/Button';
-import { useRole } from '../../context/RoleContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 
 const roles = [
   { value: 'admin', label: 'Admin' },
@@ -13,17 +14,37 @@ const roles = [
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { setRole } = useRole();
+  const { signup } = useAuth();
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '', company: '', role: 'procurement',
   });
 
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    setRole(form.role);
-    navigate('/dashboard');
+    if (form.password !== form.confirmPassword) {
+      toastError('Passwords do not match');
+      return;
+    }
+    setLoading(true);
+    try {
+      await signup({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        company: form.company,
+        role: form.role,
+      });
+      success('Account created! Please sign in.');
+      navigate('/login');
+    } catch (err) {
+      toastError(err.response?.data?.message || 'Signup failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -93,8 +114,8 @@ export default function Signup() {
           <span>I agree to the Terms of Service and Privacy Policy</span>
         </label>
 
-        <Button type="submit" size="lg" className="w-full" icon={ArrowRight}>
-          Create Account
+        <Button type="submit" size="lg" className="w-full" icon={ArrowRight} disabled={loading}>
+          {loading ? 'Creating account...' : 'Create Account'}
         </Button>
       </form>
 

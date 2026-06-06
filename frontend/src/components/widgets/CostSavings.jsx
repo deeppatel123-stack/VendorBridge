@@ -1,24 +1,21 @@
-import { PiggyBank, ArrowDownRight } from 'lucide-react';
+import { PiggyBank } from 'lucide-react';
 import Card, { CardHeader } from '../ui/Card';
-import { formatCurrency, kpiData } from '../../data';
+import { formatCurrency } from '../../utils/formatters';
 
-export default function CostSavings() {
+export default function CostSavings({ kpis = {} }) {
   return (
-    <Card className="bg-gradient-to-br from-amber-warm/5 to-emerald-brand/5">
-      <CardHeader title="Cost Saving Insights" subtitle="This month vs. market average" />
-      <div className="flex items-end justify-between">
+    <Card className="border-emerald-brand/20 bg-gradient-to-br from-emerald-brand/5 to-transparent">
+      <CardHeader title="Cost Savings" subtitle="Year to date" />
+      <div className="flex items-center gap-4">
+        <div className="p-3 rounded-xl bg-emerald-brand/10">
+          <PiggyBank className="w-6 h-6 text-emerald-brand" />
+        </div>
         <div>
-          <p className="text-3xl font-bold text-foreground">{formatCurrency(kpiData.costSavings)}</p>
-          <p className="text-sm text-foreground-subtle mt-1">Total savings achieved</p>
+          <p className="text-2xl font-bold text-foreground">{formatCurrency(kpis.costSavings ?? 0)}</p>
+          <p className="text-xs text-foreground-subtle mt-1">
+            {kpis.costSavingsPercent != null ? `${kpis.costSavingsPercent}% below market average` : 'Savings from competitive bidding'}
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-emerald-dark bg-emerald-brand/10 px-3 py-1.5 rounded-lg">
-          <ArrowDownRight className="w-4 h-4" />
-          <span className="text-sm font-semibold">{kpiData.costSavingsPercent}%</span>
-        </div>
-      </div>
-      <div className="mt-4 flex items-center gap-2 text-xs text-foreground-subtle">
-        <PiggyBank className="w-4 h-4 text-amber-warm" />
-        <span>Smart negotiation saved {formatCurrency(12000)} on IT procurement</span>
       </div>
     </Card>
   );
