@@ -19,5 +19,7 @@ router.patch('/:id/publish', authorize(ROLES.ADMIN, ROLES.PROCUREMENT), rfqContr
 router.patch('/:id/draft', authorize(ROLES.ADMIN, ROLES.PROCUREMENT), rfqController.saveDraft);
 router.patch('/:id/vendors', authorize(ROLES.ADMIN, ROLES.PROCUREMENT), rfqController.assignVendors);
 router.post('/:id/attachments', authorize(ROLES.ADMIN, ROLES.PROCUREMENT), (req, res, next) => { req.uploadFolder = 'rfqs'; next(); }, upload.single('file'), rfqController.uploadAttachment);
+router.get('/:id/attachments/:attachmentId/download', rfqController.downloadAttachment);
+router.delete('/:id/attachments/:attachmentId', authorize(ROLES.ADMIN, ROLES.PROCUREMENT), rfqController.deleteAttachment);
 
 module.exports = router;

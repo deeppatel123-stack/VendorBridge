@@ -27,7 +27,7 @@ const fileFilter = (req, file, cb) => {
   const allowed = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.png', '.jpg', '.jpeg'];
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowed.includes(ext)) cb(null, true);
-  else cb(new AppError(`File type ${ext} not allowed`, 400));
+  else cb(new Error(`File type ${ext} is not allowed. Use PDF, DOC, XLS, or images.`));
 };
 
 const upload = multer({

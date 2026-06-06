@@ -11,6 +11,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'vendor', 'manager', 'procurement'] },
   { path: '/vendors', label: 'Vendors', icon: Users, roles: ['admin', 'procurement', 'manager'] },
   { path: '/rfq', label: 'RFQs', icon: FileText, roles: ['admin', 'procurement', 'vendor', 'manager'] },
+  { path: '/quotations/submit', label: 'Submit Quote', icon: FileText, roles: ['vendor'] },
   { path: '/quotations/compare', label: 'Compare Quotes', icon: GitCompare, roles: ['admin', 'procurement', 'manager'] },
   { path: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['admin', 'manager', 'procurement'] },
   { path: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart, roles: ['admin', 'procurement', 'vendor', 'manager'] },
@@ -60,7 +61,7 @@ export default function Sidebar({ open, onClose }) {
             <ThemeToggle />
           </div>
           <NavLink
-            to="/dashboard"
+            to="/settings"
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-muted hover:text-sidebar-text hover:bg-white/5 transition-all"
           >
             <Settings className="w-4 h-4" />

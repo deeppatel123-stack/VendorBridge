@@ -65,6 +65,22 @@ const addVendorDocument = async (id, file, user) => {
     size: file.size,
   });
   await vendor.save();
+  await logActivity({ user, action: 'Uploaded vendor document', target: vendor.vendorCode, targetId: vendor._id, type: 'vendor' });
+  return vendor;
+};
+
+const getVendorDocument = async (vendorId, docId) => {
+  const vendor = await getVendorById(vendorId);
+  const doc = vendor.documents.id(docId);
+  if (!doc) throw new AppError('Document not found', 404);
+  return { vendor, doc };
+};
+
+const deleteVendorDocument = async (vendorId, docId, user) => {
+  const { vendor, doc } = await getVendorDocument(vendorId, docId);
+  vendor.documents.pull(docId);
+  await vendor.save();
+  await logActivity({ user, action: 'Deleted vendor document', target: doc.name, targetId: vendor._id, type: 'vendor' });
   return vendor;
 };
 
@@ -73,5 +89,6 @@ const createCategory = async (data) => VendorCategory.create(data);
 
 module.exports = {
   getVendors, getVendorById, createVendor, updateVendor, deleteVendor,
-  addVendorDocument, getCategories, createCategory,
+  addVendorDocument, getVendorDocument, deleteVendorDocument,
+  getCategories, createCategory,
 };

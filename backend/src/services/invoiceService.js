@@ -81,9 +81,9 @@ const markInvoicePaid = async (id, user) => {
 
 const emailInvoice = async (id, user) => {
   const invoice = await getInvoiceById(id);
-  await sendInvoiceEmail(invoice.vendor.email, invoice.invoiceNumber, invoice.total.toFixed(2));
+  const result = await sendInvoiceEmail(invoice.vendor.email, invoice.invoiceNumber, invoice.total.toFixed(2));
   await logActivity({ user, action: 'Sent Invoice Email', target: invoice.invoiceNumber, targetId: invoice._id, type: 'invoice' });
-  return invoice;
+  return { invoice, emailSent: result.sent, emailMock: result.mock };
 };
 
 const getInvoicePDF = async (id) => {

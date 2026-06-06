@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Star, Award } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -13,10 +14,16 @@ import { queryKeys } from '../api/queryKeys';
 import { useToast } from '../context/ToastContext';
 
 export default function QuotationComparison() {
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
   const [sortBy, setSortBy] = useState('price');
-  const [selectedRfqId, setSelectedRfqId] = useState(null);
+  const [selectedRfqId, setSelectedRfqId] = useState(searchParams.get('rfq'));
+
+  useEffect(() => {
+    const q = searchParams.get('rfq');
+    if (q) setSelectedRfqId(q);
+  }, [searchParams]);
 
   const { data: rfqData, isLoading: rfqsLoading } = useQuery({
     queryKey: queryKeys.rfqs({ status: 'open', limit: 50 }),

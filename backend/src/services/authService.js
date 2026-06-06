@@ -40,11 +40,14 @@ const signup = async (data) => {
 };
 
 const login = async (email, password) => {
-  const user = await User.findOne({ email, isDeleted: false }).select('+password +refreshToken');
-  if (!user || !user.isActive) throw new AppError('Invalid credentials', 401);
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await User.findOne({ email: normalizedEmail, isDeleted: false }).select('+password +refreshToken');
+
+  if (!user) throw new AppError('User does not exist', 401);
+  if (!user.isActive) throw new AppError('Account inactive. Contact your administrator.', 403);
 
   const match = await bcrypt.compare(password, user.password);
-  if (!match) throw new AppError('Invalid credentials', 401);
+  if (!match) throw new AppError('Invalid email or password', 401);
 
   user.lastLogin = new Date();
   const refreshToken = generateRefreshToken({ id: user._id });
@@ -75,8 +78,8 @@ const refreshAccessToken = async (refreshToken) => {
 };
 
 const forgotPassword = async (email) => {
-  const user = await User.findOne({ email, isDeleted: false });
-  if (!user) throw new AppError('If that email exists, a reset link was sent', 200);
+  const user = await User.findOne({ email: email.toLowerCase().trim(), isDeleted: false });
+  if (!user) return false;
 
   const { token, hashed } = generateResetToken();
   user.resetPasswordToken = hashed;

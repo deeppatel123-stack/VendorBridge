@@ -110,10 +110,26 @@ const addAttachment = async (id, file, user) => {
     uploadedBy: user._id,
   });
   await rfq.save();
+  await logActivity({ user, action: 'Uploaded RFQ attachment', target: rfq.rfqNumber, targetId: rfq._id, type: 'rfq' });
+  return rfq;
+};
+
+const getAttachment = async (rfqId, attachmentId) => {
+  const rfq = await getRFQById(rfqId);
+  const attachment = rfq.attachments.id(attachmentId);
+  if (!attachment) throw new AppError('Attachment not found', 404);
+  return { rfq, attachment };
+};
+
+const deleteAttachment = async (rfqId, attachmentId, user) => {
+  const { rfq, attachment } = await getAttachment(rfqId, attachmentId);
+  rfq.attachments.pull(attachmentId);
+  await rfq.save();
+  await logActivity({ user, action: 'Deleted RFQ attachment', target: attachment.originalName, targetId: rfq._id, type: 'rfq' });
   return rfq;
 };
 
 module.exports = {
   getRFQs, getRFQById, createRFQ, updateRFQ, deleteRFQ,
-  publishRFQ, saveDraft, assignVendors, addAttachment,
+  publishRFQ, saveDraft, assignVendors, addAttachment, getAttachment, deleteAttachment,
 };

@@ -10,12 +10,14 @@ import { formatCurrency, formatDate, entityId } from '../utils/formatters';
 import { invoicesApi } from '../api/invoices';
 import { queryKeys } from '../api/queryKeys';
 import { useAuth } from '../context/AuthContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+import { useToast } from '../context/ToastContext';
+import { getApiErrorMessage } from '../utils/authErrors';
 
 export default function Invoice() {
   const { user } = useAuth();
+  const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState(null);
+  const [emailing, setEmailing] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.invoices({ limit: 50 }),
@@ -28,10 +30,31 @@ export default function Invoice() {
     if (invoices.length && !selected) setSelected(invoices[0]);
   }, [invoices, selected]);
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!selected) return;
-    const token = localStorage.getItem('accessToken');
-    window.open(`${API_BASE}/invoices/${entityId(selected)}/pdf?token=${token}`, '_blank');
+    try {
+      await invoicesApi.downloadPdf(entityId(selected), `${selected.invoiceNumber}.pdf`);
+      success('PDF downloaded');
+    } catch (err) {
+      toastError(getApiErrorMessage(err, 'Download failed'));
+    }
+  };
+
+  const handleEmail = async () => {
+    if (!selected) return;
+    setEmailing(true);
+    try {
+      const data = await invoicesApi.email(entityId(selected));
+      const sent = data?.emailSent ?? data?.invoice?.emailSent;
+      const msg = sent === false
+        ? 'Invoice recorded — email logged on server (configure SMTP to send real emails)'
+        : 'Invoice emailed successfully';
+      success(msg);
+    } catch (err) {
+      toastError(getApiErrorMessage(err, 'Failed to email invoice'));
+    } finally {
+      setEmailing(false);
+    }
   };
 
   if (isLoading) return <LoadingState message="Loading invoices..." />;
@@ -50,7 +73,7 @@ export default function Invoice() {
           <>
             <Button variant="outline" icon={Printer} onClick={() => window.print()}>Print</Button>
             <Button variant="outline" icon={Download} onClick={handleDownload}>Download PDF</Button>
-            <Button icon={Mail}>Email Invoice</Button>
+            <Button icon={Mail} onClick={handleEmail} disabled={emailing}>{emailing ? 'Sending...' : 'Email Invoice'}</Button>
           </>
         }
       />

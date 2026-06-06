@@ -37,7 +37,7 @@ export default function AdvancedFilters({ filters, onApply }) {
               <Button size="sm" className="flex-1" onClick={() => { onApply?.(values); setOpen(false); }}>
                 Apply
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setValues({})}>
+              <Button size="sm" variant="ghost" onClick={() => { setValues({}); onApply?.({}); setOpen(false); }}>
                 Clear
               </Button>
             </div>

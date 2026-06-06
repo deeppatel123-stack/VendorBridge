@@ -1,41 +1,51 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload, X, Save, Send } from 'lucide-react';
+import { Save, Send } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Input, { Textarea, Select } from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import { LoadingState } from '../components/ui/DataState';
+import { LoadingState, ErrorState } from '../components/ui/DataState';
+import FileUpload from '../components/ui/FileUpload';
+import { getApiErrorMessage } from '../utils/authErrors';
 import { entityId } from '../utils/formatters';
 import { vendorsApi } from '../api/vendors';
 import { rfqsApi } from '../api/rfqs';
 import { queryKeys } from '../api/queryKeys';
 import { useToast } from '../context/ToastContext';
 
-const categoryOptions = [
-  { value: 'IT Equipment', label: 'IT Equipment' },
-  { value: 'Raw Materials', label: 'Raw Materials' },
-  { value: 'Office Supplies', label: 'Office Supplies' },
-  { value: 'Logistics', label: 'Logistics' },
-  { value: 'Manufacturing', label: 'Manufacturing' },
-];
-
 export default function RFQCreate() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
   const [form, setForm] = useState({
     title: '', description: '', quantity: '', unit: 'units',
     category: 'IT Equipment', deadline: '', budget: '',
   });
-  const [selectedVendors, setSelectedVendors] = useState([]);
+  const [selectedVendors, setSelectedVendors] = useState(location.state?.vendorIds || []);
   const [attachments, setAttachments] = useState([]);
 
-  const { data: vendorData, isLoading: vendorsLoading } = useQuery({
+  const { data: vendorData, isLoading: vendorsLoading, isError: vendorsError, refetch: refetchVendors } = useQuery({
     queryKey: queryKeys.vendors({ status: 'active', limit: 100 }),
     queryFn: () => vendorsApi.list({ status: 'active', limit: 100 }),
   });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['vendor-categories'],
+    queryFn: vendorsApi.getCategories,
+  });
+
+  const categoryOptions = categories.length
+    ? categories.map((c) => ({ value: c.name, label: c.name }))
+    : [
+      { value: 'IT Equipment', label: 'IT Equipment' },
+      { value: 'Raw Materials', label: 'Raw Materials' },
+      { value: 'Office Supplies', label: 'Office Supplies' },
+      { value: 'Logistics', label: 'Logistics' },
+      { value: 'Manufacturing', label: 'Manufacturing' },
+    ];
 
   const vendors = vendorData?.items || [];
 
@@ -81,26 +91,34 @@ export default function RFQCreate() {
     status,
   });
 
+  const uploadFiles = async (rfqId) => {
+    for (const file of attachments) {
+      await rfqsApi.uploadAttachment(rfqId, file);
+    }
+  };
+
   const handleSaveDraft = async () => {
     try {
       const result = await createMutation.mutateAsync(buildPayload('draft'));
-      const id = entityId(result?.rfq || result);
-      if (selectedVendors.length) await rfqsApi.assignVendors(id, selectedVendors);
+      const rfqId = entityId(result?.rfq || result);
+      if (selectedVendors.length) await rfqsApi.assignVendors(rfqId, selectedVendors);
+      if (attachments.length) await uploadFiles(rfqId);
       success('Draft saved');
       navigate('/rfq');
-    } catch {
-      /* handled in mutation */
+    } catch (err) {
+      toastError(getApiErrorMessage(err, 'Failed to save draft'));
     }
   };
 
   const handlePublish = async () => {
     try {
       const result = await createMutation.mutateAsync(buildPayload('draft'));
-      const id = entityId(result?.rfq || result);
-      if (selectedVendors.length) await rfqsApi.assignVendors(id, selectedVendors);
-      await publishMutation.mutateAsync(id);
-    } catch {
-      /* handled in mutation */
+      const rfqId = entityId(result?.rfq || result);
+      if (selectedVendors.length) await rfqsApi.assignVendors(rfqId, selectedVendors);
+      if (attachments.length) await uploadFiles(rfqId);
+      await publishMutation.mutateAsync(rfqId);
+    } catch (err) {
+      toastError(getApiErrorMessage(err, 'Failed to publish RFQ'));
     }
   };
 
@@ -141,31 +159,21 @@ export default function RFQCreate() {
           </Card>
 
           <Card>
-            <h3 className="text-base font-semibold text-foreground mb-4">Attachments</h3>
-            <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-emerald-brand/40 transition-colors cursor-pointer">
-              <Upload className="w-8 h-8 text-foreground-subtle mx-auto mb-2" />
-              <p className="text-sm text-foreground-subtle">Drag & drop files or <span className="text-emerald-brand font-medium">browse</span></p>
-              <p className="text-xs text-foreground-subtle mt-1">PDF, DOC, XLS up to 10MB</p>
-            </div>
-            {attachments.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {attachments.map((file) => (
-                  <div key={file} className="flex items-center justify-between p-2.5 rounded-lg bg-surface-muted">
-                    <span className="text-sm text-foreground">{file}</span>
-                    <button type="button" onClick={() => setAttachments(attachments.filter((f) => f !== file))} className="p-1 hover:bg-surface-inset rounded">
-                      <X className="w-3.5 h-3.5 text-foreground-subtle" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <FileUpload
+              label="Attachments"
+              files={attachments}
+              onFilesChange={setAttachments}
+              multiple
+            />
           </Card>
         </div>
 
         <Card>
           <h3 className="text-base font-semibold text-foreground mb-4">Select Vendors</h3>
           <p className="text-xs text-foreground-subtle mb-4">Choose vendors to invite for this RFQ</p>
-          {vendorsLoading ? <LoadingState message="Loading vendors..." /> : (
+          {vendorsLoading ? <LoadingState message="Loading vendors..." /> : vendorsError ? (
+            <ErrorState message="Failed to load vendors" onRetry={refetchVendors} />
+          ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {vendors.map((vendor) => {
                 const vid = entityId(vendor);

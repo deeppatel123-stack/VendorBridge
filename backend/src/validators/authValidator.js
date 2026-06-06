@@ -10,8 +10,8 @@ exports.signup = [
 ];
 
 exports.login = [
-  body('email').isEmail().normalizeEmail(),
-  body('password').notEmpty(),
+  body('email').isEmail().normalizeEmail().withMessage('Please enter a valid email address'),
+  body('password').notEmpty().withMessage('Password is required'),
 ];
 
 exports.forgotPassword = [body('email').isEmail().normalizeEmail()];

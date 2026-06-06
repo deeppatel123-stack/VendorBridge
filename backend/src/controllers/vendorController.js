@@ -44,6 +44,20 @@ exports.uploadDocument = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+exports.downloadDocument = async (req, res, next) => {
+  try {
+    const { doc } = await vendorService.getVendorDocument(req.params.id, req.params.docId);
+    return res.download(doc.filePath, doc.name);
+  } catch (e) { next(e); }
+};
+
+exports.deleteDocument = async (req, res, next) => {
+  try {
+    const vendor = await vendorService.deleteVendorDocument(req.params.id, req.params.docId, req.user);
+    ApiResponse.success(res, { vendor }, 'Document deleted');
+  } catch (e) { next(e); }
+};
+
 exports.getCategories = async (req, res, next) => {
   try {
     const categories = await vendorService.getCategories();

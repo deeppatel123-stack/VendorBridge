@@ -1,4 +1,5 @@
 const { ApiResponse } = require('../utils/ApiResponse');
+const config = require('../config');
 
 const errorHandler = (err, req, res, next) => {
   console.error('[Error]', err.message);
@@ -22,11 +23,36 @@ const errorHandler = (err, req, res, next) => {
   }
 
   if (err.name === 'TokenExpiredError') {
-    return ApiResponse.error(res, 'Token expired', 401);
+    return ApiResponse.error(res, 'Session expired. Please sign in again.', 401);
+  }
+
+  if (err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return ApiResponse.error(res, 'File is too large. Maximum size is 10MB.', 413);
+    }
+    return ApiResponse.error(res, err.message || 'Upload failed', 400);
+  }
+
+  // Never expose raw SMTP / mail transport errors to clients
+  const msg = err.message || '';
+  if (
+    err.code === 'EAUTH'
+    || err.code === 'ESOCKET'
+    || /535|smtp|gsmtp|invalid login|badcredentials/i.test(msg)
+  ) {
+    console.error('[Email transport error]', msg);
+    return ApiResponse.error(
+      res,
+      'Email could not be sent. SMTP is not configured correctly — check server logs or disable SMTP for local development.',
+      503
+    );
   }
 
   const statusCode = err.statusCode || 500;
-  return ApiResponse.error(res, err.message || 'Internal server error', statusCode, err.errors || null);
+  const safeMessage = statusCode >= 500 && config.env === 'production'
+    ? 'Internal server error'
+    : (err.message || 'Internal server error');
+  return ApiResponse.error(res, safeMessage, statusCode, err.errors || null);
 };
 
 const notFound = (req, res) => {

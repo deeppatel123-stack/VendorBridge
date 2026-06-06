@@ -63,7 +63,7 @@ export default function Reports() {
         subtitle="Real-time procurement intelligence"
         actions={
           <>
-            <Button variant="outline" icon={FileSpreadsheet} onClick={() => handleExport('procurement-growth')}>Export CSV</Button>
+            <Button variant="outline" icon={FileSpreadsheet} onClick={() => handleExport('procurement-growth')}>Export JSON</Button>
             <Button icon={Download} onClick={() => handleExport('monthly')}>Export Report</Button>
           </>
         }

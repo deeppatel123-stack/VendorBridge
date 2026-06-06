@@ -201,14 +201,14 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'Create RFQ', icon: FileText, path: '/rfq/create' },
-            { label: 'Add Vendor', icon: Users, path: '/vendors' },
+            { label: 'Add Vendor', icon: Users, path: '/vendors', state: { openAdd: true } },
             { label: 'Compare Quotes', icon: GitCompare, path: '/quotations/compare' },
             { label: 'View Approvals', icon: CheckSquare, path: '/approvals' },
           ].map((action) => (
             <button
               key={action.label}
               type="button"
-              onClick={() => navigate(action.path)}
+              onClick={() => navigate(action.path, action.state ? { state: action.state } : undefined)}
               className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border hover:border-emerald-brand/30 hover:bg-emerald-brand/5 transition-all card-hover interactive"
             >
               <action.icon className="w-5 h-5 text-emerald-brand" />

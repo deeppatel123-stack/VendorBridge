@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { User, Mail, Lock, Building2, ArrowRight, UserCog } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { getAuthErrorMessage } from '../../utils/authErrors';
 
 const roles = [
   { value: 'admin', label: 'Admin' },
@@ -14,9 +15,11 @@ const roles = [
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { signup } = useAuth();
+  const { signup, isAuthenticated } = useAuth();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '', company: '', role: 'procurement',
   });
@@ -25,6 +28,10 @@ export default function Signup() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    if (form.password.length < 8) {
+      toastError('Password must be at least 8 characters');
+      return;
+    }
     if (form.password !== form.confirmPassword) {
       toastError('Passwords do not match');
       return;
@@ -41,7 +48,7 @@ export default function Signup() {
       success('Account created! Please sign in.');
       navigate('/login');
     } catch (err) {
-      toastError(err.response?.data?.message || 'Signup failed');
+      toastError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }

@@ -15,12 +15,12 @@ import { queryKeys } from '../api/queryKeys';
 import { useToast } from '../context/ToastContext';
 
 export default function QuotationSubmit() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const rfqId = searchParams.get('rfq');
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
 
-  const { data: rfqList, isLoading: listLoading } = useQuery({
+  const { data: rfqList, isLoading: listLoading, isError: listError, error: listErr, refetch: refetchRfqs } = useQuery({
     queryKey: queryKeys.rfqs({ status: 'open', limit: 50 }),
     queryFn: () => rfqsApi.list({ status: 'open', limit: 50 }),
   });
@@ -58,10 +58,26 @@ export default function QuotationSubmit() {
   };
 
   if (listLoading) return <LoadingState message="Loading RFQs..." />;
+  if (listError) return <ErrorState message={listErr?.response?.data?.message || listErr.message} onRetry={refetchRfqs} />;
   if (!rfq) return <ErrorState message="No open RFQs available" />;
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {rfqList?.items?.length > 1 && (
+        <div className="max-w-xs">
+          <label className="text-sm font-medium text-foreground">Select RFQ</label>
+          <select
+            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+            value={selectedRfqId || ''}
+            onChange={(e) => setSearchParams({ rfq: e.target.value })}
+          >
+            {rfqList.items.map((r) => (
+              <option key={entityId(r)} value={entityId(r)}>{r.rfqNumber} — {r.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <PageHeader
         title="Submit Quotation"
         subtitle="Respond to an open RFQ with your pricing"

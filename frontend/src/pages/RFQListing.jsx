@@ -12,6 +12,7 @@ import { formatCurrency, formatDate, entityId } from '../utils/formatters';
 import { useDebounce } from '../hooks/useDebounce';
 import { rfqsApi } from '../api/rfqs';
 import { queryKeys } from '../api/queryKeys';
+import { useRole } from '../context/RoleContext';
 
 const filterOptions = [
   { key: 'status', label: 'Status', options: [
@@ -25,6 +26,12 @@ const filterOptions = [
 
 export default function RFQListing() {
   const navigate = useNavigate();
+  const { role } = useRole();
+
+  const goToRfq = (rfqId) => {
+    if (role === 'vendor') navigate(`/quotations/submit?rfq=${rfqId}`);
+    else navigate(`/quotations/compare?rfq=${rfqId}`);
+  };
   const [search, setSearch] = useState('');
   const [view, setView] = useState('cards');
   const [filters, setFilters] = useState({});
@@ -94,7 +101,7 @@ export default function RFQListing() {
       {!isLoading && !isError && rfqs.length > 0 && view === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {rfqs.map((rfq) => (
-            <Card key={entityId(rfq)} hover className="cursor-pointer" onClick={() => navigate(`/quotations/submit?rfq=${entityId(rfq)}`)}>
+            <Card key={entityId(rfq)} hover className="cursor-pointer" onClick={() => goToRfq(entityId(rfq))}>
               <div className="flex items-start justify-between mb-3">
                 <Badge status={rfq.status} />
                 <span className="text-xs text-foreground-subtle font-mono">{rfq.rfqNumber}</span>
@@ -127,7 +134,7 @@ export default function RFQListing() {
               </thead>
               <tbody>
                 {rfqs.map((rfq) => (
-                  <tr key={entityId(rfq)} className="border-b border-border hover:bg-surface-muted cursor-pointer" onClick={() => navigate(`/quotations/submit?rfq=${entityId(rfq)}`)}>
+                  <tr key={entityId(rfq)} className="border-b border-border hover:bg-surface-muted cursor-pointer" onClick={() => goToRfq(entityId(rfq))}>
                     <td className="py-3 px-3 font-mono text-xs">{rfq.rfqNumber}</td>
                     <td className="py-3 px-3 font-medium text-foreground">{rfq.title}</td>
                     <td className="py-3 px-3"><Badge status={rfq.status} /></td>

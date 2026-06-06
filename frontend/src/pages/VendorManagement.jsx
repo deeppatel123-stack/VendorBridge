@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Star, Mail, Phone, ExternalLink } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -42,13 +42,30 @@ const filterOptions = [
 
 export default function VendorManagement() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(1);
   const [selectedVendor, setSelectedVendor] = useState(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(!!location.state?.openAdd);
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['vendor-categories'],
+    queryFn: vendorsApi.getCategories,
+  });
+
+  const categoryFilterOptions = [
+    { value: '', label: 'All Categories' },
+    ...(categories.length
+      ? categories.map((c) => ({ value: c.name, label: c.name }))
+      : filterOptions.find((f) => f.key === 'category').options.slice(1)),
+  ];
+
+  const dynamicFilterOptions = filterOptions.map((f) =>
+    f.key === 'category' ? { ...f, options: categoryFilterOptions } : f
+  );
   const [newVendor, setNewVendor] = useState({ name: '', email: '', category: 'IT Equipment', phone: '' });
   const debouncedSearch = useDebounce(search);
 
@@ -93,7 +110,7 @@ export default function VendorManagement() {
               className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border text-sm focus:border-emerald-brand focus:outline-none focus:ring-2 focus:ring-emerald-brand/20"
             />
           </div>
-          <AdvancedFilters filters={filterOptions} onApply={(f) => { setFilters(f); setPage(1); }} />
+          <AdvancedFilters filters={dynamicFilterOptions} onApply={(f) => { setFilters(f); setPage(1); }} />
         </div>
 
         {isLoading && <LoadingState />}

@@ -16,6 +16,7 @@ module.exports = {
     sameSite: process.env.COOKIE_SAME_SITE || 'lax',
   },
   email: {
+    enabled: process.env.SMTP_ENABLED !== 'false',
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT, 10) || 587,
     user: process.env.SMTP_USER,

@@ -7,7 +7,7 @@ const protect = async (req, res, next) => {
   try {
     let token = req.headers.authorization?.startsWith('Bearer')
       ? req.headers.authorization.split(' ')[1]
-      : req.cookies?.accessToken;
+      : req.cookies?.accessToken || req.query?.token;
 
     if (!token) {
       return ApiResponse.error(res, 'Not authorized. Please login.', 401);

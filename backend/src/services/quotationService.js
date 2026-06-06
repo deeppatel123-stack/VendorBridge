@@ -116,7 +116,28 @@ const selectWinner = async (quotationId, user) => {
   return winner;
 };
 
+const addAttachment = async (id, file, user) => {
+  const quotation = await getQuotationById(id);
+  quotation.attachments.push({
+    originalName: file.originalname,
+    fileName: file.filename,
+    filePath: file.path,
+    mimeType: file.mimetype,
+    size: file.size,
+  });
+  await quotation.save();
+  await logActivity({ user, action: 'Uploaded quotation attachment', target: quotation.quotationNumber, targetId: quotation._id, type: 'quotation' });
+  return quotation;
+};
+
+const getAttachment = async (quotationId, attachmentId) => {
+  const quotation = await getQuotationById(quotationId);
+  const attachment = quotation.attachments.id(attachmentId);
+  if (!attachment) throw new AppError('Attachment not found', 404);
+  return { quotation, attachment };
+};
+
 module.exports = {
   getQuotations, getQuotationById, submitQuotation, updateQuotation,
-  compareQuotations, selectWinner,
+  compareQuotations, selectWinner, addAttachment, getAttachment,
 };

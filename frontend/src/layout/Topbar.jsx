@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Menu, Bell, ChevronDown, LogOut } from 'lucide-react';
 import { useRole } from '../context/RoleContext';
@@ -40,14 +40,14 @@ export default function Topbar({ onMenuClick }) {
         <div className="flex items-center gap-2 ml-auto">
           <ThemeToggle className="hidden lg:flex" />
 
-          <button type="button" className="relative p-2 rounded-lg hover:bg-surface-muted transition-colors interactive">
+          <Link to="/dashboard" className="relative p-2 rounded-lg hover:bg-surface-muted transition-colors interactive" title="Notifications">
             <Bell className="w-5 h-5 text-foreground-subtle" />
             {unread > 0 && (
               <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-emerald-brand text-white text-[10px] font-bold flex items-center justify-center animate-pulse-soft">
                 {unread}
               </span>
             )}
-          </button>
+          </Link>
 
           <div className="flex items-center gap-2 pl-3 border-l border-border">
             <div className="w-8 h-8 rounded-lg bg-emerald-brand/15 text-emerald-dark dark:text-emerald-brand flex items-center justify-center text-xs font-bold">

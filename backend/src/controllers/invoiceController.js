@@ -32,8 +32,11 @@ exports.markPaid = async (req, res, next) => {
 
 exports.emailInvoice = async (req, res, next) => {
   try {
-    const invoice = await invoiceService.emailInvoice(req.params.id, req.user);
-    ApiResponse.success(res, { invoice }, 'Invoice emailed');
+    const { invoice, emailSent, emailMock } = await invoiceService.emailInvoice(req.params.id, req.user);
+    const message = emailSent
+      ? 'Invoice emailed successfully'
+      : 'Invoice recorded — email logged to server (SMTP not configured or failed)';
+    ApiResponse.success(res, { invoice, emailSent, emailMock }, message);
   } catch (e) { next(e); }
 };
 

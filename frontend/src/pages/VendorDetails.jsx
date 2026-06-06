@@ -1,37 +1,95 @@
-import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Star, Mail, Phone, MapPin, FileText, Download, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Star, Mail, Phone, MapPin, FileText, Download, TrendingUp, Upload } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Card, { CardHeader } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import Drawer from '../components/ui/Drawer';
+import Input from '../components/ui/Input';
 import RiskIndicator from '../components/widgets/RiskIndicator';
+import FileUpload from '../components/ui/FileUpload';
 import { LoadingState, ErrorState } from '../components/ui/DataState';
 import { formatCurrency, formatDate, entityId } from '../utils/formatters';
 import { vendorsApi } from '../api/vendors';
 import { quotationsApi } from '../api/quotations';
 import { purchaseOrdersApi } from '../api/purchaseOrders';
 import { queryKeys } from '../api/queryKeys';
+import { useToast } from '../context/ToastContext';
+import { getApiErrorMessage } from '../utils/authErrors';
 
 export default function VendorDetails() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { success, error: toastError } = useToast();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
   const { data: vendor, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.vendor(id),
     queryFn: () => vendorsApi.get(id),
   });
 
-  const { data: quotesData } = useQuery({
+  const { data: quotesData, isLoading: quotesLoading } = useQuery({
     queryKey: queryKeys.quotations({ vendor: id, limit: 10 }),
     queryFn: () => quotationsApi.list({ limit: 50 }),
     enabled: !!id,
   });
 
-  const { data: posData } = useQuery({
+  const { data: posData, isLoading: posLoading } = useQuery({
     queryKey: queryKeys.purchaseOrders({ limit: 50 }),
     queryFn: () => purchaseOrdersApi.list({ limit: 50 }),
     enabled: !!id,
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (body) => vendorsApi.update(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.vendor(id) });
+      queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      success('Vendor updated');
+      setEditOpen(false);
+    },
+    onError: (err) => toastError(getApiErrorMessage(err)),
+  });
+
+  const openEdit = () => {
+    setEditForm({
+      name: vendor.name,
+      email: vendor.email,
+      phone: vendor.phone || '',
+      category: vendor.category,
+      contactPerson: vendor.contactPerson || '',
+      address: vendor.address || '',
+    });
+    setEditOpen(true);
+  };
+
+  const handleUpload = async (file) => {
+    setUploading(true);
+    try {
+      await vendorsApi.uploadDocument(id, file);
+      queryClient.invalidateQueries({ queryKey: queryKeys.vendor(id) });
+      success('Document uploaded');
+      setUploadFiles([]);
+    } catch (err) {
+      toastError(getApiErrorMessage(err, 'Upload failed'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (doc) => {
+    try {
+      await vendorsApi.downloadDocument(id, entityId(doc), doc.name || doc.fileName);
+    } catch (err) {
+      toastError(getApiErrorMessage(err, 'Download failed'));
+    }
+  };
 
   if (isLoading) return <LoadingState message="Loading vendor..." />;
   if (isError || !vendor) {
@@ -58,8 +116,8 @@ export default function VendorDetails() {
         subtitle={`${vendor.category} · Joined ${formatDate(vendor.createdAt)}`}
         actions={
           <>
-            <Button variant="outline">Edit Vendor</Button>
-            <Button>Create RFQ</Button>
+            <Button variant="outline" onClick={openEdit}>Edit Vendor</Button>
+            <Button onClick={() => navigate('/rfq/create', { state: { vendorIds: [id] } })}>Create RFQ</Button>
           </>
         }
       />
@@ -88,8 +146,8 @@ export default function VendorDetails() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: 'Total Orders', value: vendor.totalOrders ?? vendorPOs.length },
-              { label: 'On-Time Delivery', value: `${vendor.onTimeDelivery}%` },
-              { label: 'Total Spend', value: formatCurrency(vendor.spend || vendor.totalSpend) },
+              { label: 'On-Time Delivery', value: `${vendor.onTimeDelivery ?? 0}%` },
+              { label: 'Total Spend', value: formatCurrency(vendor.spend || vendor.totalSpend || 0) },
               { label: 'Quotations', value: vendorQuotes.length },
             ].map((m) => (
               <Card key={m.label} className="text-center">
@@ -101,34 +159,38 @@ export default function VendorDetails() {
 
           <Card>
             <CardHeader title="Recent Quotations" />
-            <div className="space-y-3">
-              {vendorQuotes.map((q) => (
-                <div key={entityId(q)} className="flex items-center justify-between p-3 rounded-lg bg-surface-muted">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{q.rfq?.title || q.quotationNumber}</p>
-                    <p className="text-xs text-foreground-subtle">{formatCurrency(q.price)} · {q.deliveryDays} days delivery</p>
+            {quotesLoading ? <LoadingState message="Loading quotations..." /> : (
+              <div className="space-y-3">
+                {vendorQuotes.map((q) => (
+                  <div key={entityId(q)} className="flex items-center justify-between p-3 rounded-lg bg-surface-muted">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{q.rfq?.title || q.quotationNumber}</p>
+                      <p className="text-xs text-foreground-subtle">{formatCurrency(q.price)} · {q.deliveryDays} days delivery</p>
+                    </div>
+                    <Badge status={q.status} />
                   </div>
-                  <Badge status={q.status} />
-                </div>
-              ))}
-              {vendorQuotes.length === 0 && <p className="text-sm text-foreground-subtle text-center py-4">No quotations yet</p>}
-            </div>
+                ))}
+                {vendorQuotes.length === 0 && <p className="text-sm text-foreground-subtle text-center py-4">No quotations yet</p>}
+              </div>
+            )}
           </Card>
 
           <Card>
             <CardHeader title="Procurement History" />
-            <div className="space-y-3">
-              {vendorPOs.map((po) => (
-                <div key={entityId(po)} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{po.poNumber}</p>
-                    <p className="text-xs text-foreground-subtle">Created {formatDate(po.createdAt)}</p>
+            {posLoading ? <LoadingState message="Loading purchase orders..." /> : (
+              <div className="space-y-3">
+                {vendorPOs.map((po) => (
+                  <div key={entityId(po)} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{po.poNumber}</p>
+                      <p className="text-xs text-foreground-subtle">Created {formatDate(po.createdAt)}</p>
+                    </div>
+                    <Badge status={po.status} />
                   </div>
-                  <Badge status={po.status} />
-                </div>
-              ))}
-              {vendorPOs.length === 0 && <p className="text-sm text-foreground-subtle text-center py-4">No purchase orders yet</p>}
-            </div>
+                ))}
+                {vendorPOs.length === 0 && <p className="text-sm text-foreground-subtle text-center py-4">No purchase orders yet</p>}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -147,8 +209,8 @@ export default function VendorDetails() {
             <CardHeader title="Performance Metrics" />
             <div className="space-y-4">
               {[
-                { label: 'Delivery Score', value: vendor.onTimeDelivery },
-                { label: 'Quality Score', value: Math.round(vendor.rating * 20) },
+                { label: 'Delivery Score', value: vendor.onTimeDelivery ?? 0 },
+                { label: 'Quality Score', value: Math.round((vendor.rating || 0) * 20) },
                 { label: 'Cost Efficiency', value: Math.min(95, Math.round(100 - (vendor.risk === 'high' ? 18 : vendor.risk === 'medium' ? 10 : 5))) },
               ].map((m) => (
                 <div key={m.label}>
@@ -164,28 +226,50 @@ export default function VendorDetails() {
             </div>
             <div className="mt-4 flex items-center gap-2 text-sm text-emerald-dark">
               <TrendingUp className="w-4 h-4" />
-              Performance from live data
+              Live performance data
             </div>
           </Card>
 
-          {vendor.documents?.length > 0 && (
-            <Card>
-              <CardHeader title="Documents" />
-              <div className="space-y-2">
-                {vendor.documents.map((doc) => (
-                  <div key={doc._id || doc.fileName} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-muted transition-colors">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-foreground-subtle" />
-                      <span className="text-sm text-foreground">{doc.originalName || doc.fileName}</span>
-                    </div>
-                    <Button size="sm" variant="ghost"><Download className="w-3.5 h-3.5" /></Button>
+          <Card>
+            <CardHeader title="Documents" action={<Upload className="w-4 h-4 text-foreground-subtle" />} />
+            <FileUpload
+              label=""
+              files={uploadFiles}
+              onFilesChange={setUploadFiles}
+              onUpload={handleUpload}
+              uploading={uploading}
+            />
+            <div className="space-y-2 mt-4">
+              {(vendor.documents || []).map((doc) => (
+                <div key={entityId(doc)} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-muted transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="w-4 h-4 text-foreground-subtle shrink-0" />
+                    <span className="text-sm text-foreground truncate">{doc.name || doc.fileName}</span>
                   </div>
-                ))}
-              </div>
-            </Card>
-          )}
+                  <Button size="sm" variant="ghost" onClick={() => handleDownload(doc)}>
+                    <Download className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {!vendor.documents?.length && <p className="text-sm text-foreground-subtle text-center py-2">No documents uploaded</p>}
+            </div>
+          </Card>
         </div>
       </div>
+
+      <Drawer open={editOpen} onClose={() => setEditOpen(false)} title="Edit Vendor">
+        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(editForm); }}>
+          <Input label="Name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+          <Input label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} required />
+          <Input label="Phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+          <Input label="Category" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} required />
+          <Input label="Contact person" value={editForm.contactPerson} onChange={(e) => setEditForm({ ...editForm, contactPerson: e.target.value })} />
+          <Input label="Address" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+          <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+          </Button>
+        </form>
+      </Drawer>
     </div>
   );
 }

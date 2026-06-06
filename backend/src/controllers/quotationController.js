@@ -42,3 +42,18 @@ exports.selectWinner = async (req, res, next) => {
     ApiResponse.success(res, { quotation }, 'Winning quotation selected');
   } catch (e) { next(e); }
 };
+
+exports.uploadAttachment = async (req, res, next) => {
+  try {
+    if (!req.file) return ApiResponse.error(res, 'No file uploaded', 400);
+    const quotation = await quotationService.addAttachment(req.params.id, req.file, req.user);
+    ApiResponse.success(res, { quotation }, 'Attachment uploaded');
+  } catch (e) { next(e); }
+};
+
+exports.downloadAttachment = async (req, res, next) => {
+  try {
+    const { attachment } = await quotationService.getAttachment(req.params.id, req.params.attachmentId);
+    return res.download(attachment.filePath, attachment.originalName);
+  } catch (e) { next(e); }
+};
